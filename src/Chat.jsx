@@ -4,7 +4,13 @@ import { IoSend } from "react-icons/io5";
 import "./Chat.css";
 import notificationSound from "./assets/mixkit-software-interface-start-2574.wav";
 
-const socket = io("https://chat-app-backend-1-11lo.onrender.com"); // Make sure backend URL matches
+// online backend: https://chat-app-backend-1-11lo.onrender.com
+const socket = io("https://chat-app-backend-1-11lo.onrender.com", {
+  transports: ["websocket", "polling"],
+  reconnection: true,
+  reconnectionAttempts: 5,
+  reconnectionDelay: 1000,
+});
 
 const audio = new Audio(notificationSound);
 
@@ -15,32 +21,71 @@ export default function Chat() {
   const [messages, setMessages] = useState([]);
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [darkMode, setDarkMode] = useState(false);
+
   const messagesEndRef = useRef(null);
 
-  // Login function
+  // LOGIN
   const login = () => {
-    if (username.trim() !== "") {
+    if (username.trim()) {
       socket.emit("join", username);
       setIsLoggedIn(true);
     }
   };
 
-  // Send message function
+  // SEND MESSAGE
   const sendMessage = () => {
-    if (message.trim() !== "") {
-      socket.emit("send_message", { username, message });
+    if (message.trim()) {
+      socket.emit("send_message", {
+        username,
+        message,
+      });
+
       setMessage("");
     }
   };
 
-  // Socket listeners
+  // SOCKET CONNECTION DEBUGGING
   useEffect(() => {
-    socket.on("message_history", (msgs) => setMessages(msgs));
-    socket.on("receive_message", (msg) => {
-      setMessages((prev) => [...prev, msg]);
-      if (msg.username !== username) audio.play();
+    socket.on("connect", () => {
+      console.log("Socket Connected:", socket.id);
     });
-    socket.on("online_users", (users) => setOnlineUsers(users));
+
+    socket.on("disconnect", () => {
+      console.log("Socket Disconnected");
+    });
+
+    socket.on("connect_error", (err) => {
+      console.log("Connection Error:", err.message);
+    });
+
+    return () => {
+      socket.off("connect");
+      socket.off("disconnect");
+      socket.off("connect_error");
+    };
+  }, []);
+
+  // SOCKET EVENTS
+  useEffect(() => {
+    socket.on("message_history", (msgs) => {
+      console.log("History Loaded:", msgs);
+      setMessages(msgs);
+    });
+
+    socket.on("receive_message", (msg) => {
+      console.log("New Message:", msg);
+
+      setMessages((prev) => [...prev, msg]);
+
+      if (msg.username !== username) {
+        audio.play().catch(() => {});
+      }
+    });
+
+    socket.on("online_users", (users) => {
+      console.log("Online Users:", users);
+      setOnlineUsers(users);
+    });
 
     return () => {
       socket.off("message_history");
@@ -49,70 +94,81 @@ export default function Chat() {
     };
   }, [username]);
 
-  // Auto scroll
+  // AUTO SCROLL
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView({
+      behavior: "smooth",
+    });
   }, [messages]);
 
+  // LOGIN SCREEN
   if (!isLoggedIn) {
     return (
       <div className={`login-container ${darkMode ? "dark" : ""}`}>
-        <h2>Enter Username</h2>
+        <h2>Realtime Chat</h2>
+
         <input
+          type="text"
+          placeholder="Enter username"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          placeholder="Username"
         />
+
         <button onClick={login}>Join Chat</button>
-        <button
-          className="dark-toggle"
-          onClick={() => setDarkMode((prev) => !prev)}
-        >
+
+        <button className="dark-toggle" onClick={() => setDarkMode(!darkMode)}>
           {darkMode ? "Light Mode" : "Dark Mode"}
         </button>
       </div>
     );
   }
 
+  // CHAT UI
   return (
     <div className={`chat-container ${darkMode ? "dark" : ""}`}>
       <div className="online-users">
         <h3>Online Users</h3>
+
         <ul>
-          {onlineUsers.map((user, idx) => (
-            <li key={idx}>{user}</li>
+          {onlineUsers.map((user, index) => (
+            <li key={index}>{user}</li>
           ))}
         </ul>
-        <button
-          className="dark-toggle"
-          onClick={() => setDarkMode((prev) => !prev)}
-        >
+
+        <button className="dark-toggle" onClick={() => setDarkMode(!darkMode)}>
           {darkMode ? "Light Mode" : "Dark Mode"}
         </button>
       </div>
 
       <div className="chat-box">
         <div className="messages">
-          {messages.map((msg, idx) => (
+          {messages.map((msg, index) => (
             <div
-              key={idx}
-              className={`message ${msg.username === username ? "self" : "other"}`}
+              key={index}
+              className={`message ${
+                msg.username === username ? "self" : "other"
+              }`}
             >
               <strong className="username">{msg.username}</strong>
-              <span className="time">{msg.time}</span>
+
               <p className="text">{msg.message}</p>
+
+              <span className="time">{msg.time}</span>
             </div>
           ))}
-          <div ref={messagesEndRef} />
+
+          <div ref={messagesEndRef}></div>
         </div>
 
         <div className="input-box">
           <input
+            type="text"
+            placeholder="Type a message..."
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-            placeholder="Type a message..."
           />
+
           <button onClick={sendMessage}>
             <IoSend size={20} />
           </button>
