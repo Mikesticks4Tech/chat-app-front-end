@@ -73,7 +73,7 @@ export default function Chat() {
     });
 
     socket.on("receive_message", (msg) => {
-      console.log("New Message:", msg);
+      console.log("Received Message:", msg);
 
       setMessages((prev) => [...prev, msg]);
 
